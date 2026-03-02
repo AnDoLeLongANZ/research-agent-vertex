@@ -1,4 +1,4 @@
-"""Entry point for research agent using AgentDefinition for subagents.
+"""Entry point for QA testing agent using AgentDefinition for subagents.
 
   agent.py: model="haiku"
       ↓
@@ -53,8 +53,8 @@ def load_prompt(filename: str) -> str:
         return f.read().strip()
 
 
-async def chat():
-    """Start interactive chat with the research agent."""
+async def run():
+    """Run the QA testing pipeline in single-shot mode."""
 
     # Verify Vertex AI authentication first, before creating any files
     auth_ok, auth_message = verify_vertex_auth()
@@ -80,50 +80,49 @@ async def chat():
 
     # Load prompts
     lead_agent_prompt = load_prompt("lead_agent.txt")
-    researcher_prompt = load_prompt("researcher.txt")
-    data_analyst_prompt = load_prompt("data_analyst.txt")
-    report_writer_prompt = load_prompt("report_writer.txt")
+    test_generator_prompt = load_prompt("test_generator.txt")
+    test_executor_prompt = load_prompt("test_executor.txt")
+    qa_report_writer_prompt = load_prompt("qa_report_writer.txt")
 
     # Initialize subagent tracker with transcript writer and session directory
     tracker = SubagentTracker(transcript_writer=transcript, session_dir=session_dir)
 
     # Define specialized subagents
     agents = {
-        "researcher": AgentDefinition(
+        "test-generator": AgentDefinition(
             description=(
-                "Use this agent when you need to gather research information on any topic. "
-                "The researcher uses web search to find relevant information, articles, and sources "
-                "from across the internet. Writes research findings to files/research_notes/ "
-                "for later use by report writers. Ideal for complex research tasks "
-                "that require deep searching and cross-referencing."
-            ),
-            tools=["WebSearch", "Write"],
-            prompt=researcher_prompt,
-            model=CLAUDE_MODEL
-        ),
-        "data-analyst": AgentDefinition(
-            description=(
-                "Use this agent AFTER researchers have completed their work to generate quantitative "
-                "analysis and visualizations. The data-analyst reads research notes from files/research_notes/, "
-                "extracts numerical data (percentages, rankings, trends, comparisons), and generates "
-                "charts using Python/matplotlib via Bash. Saves charts to files/charts/ and writes "
-                "a data summary to files/data/. Use this before the report-writer to add visual insights."
+                "Use this agent to generate QA test cases from an OpenAPI specification. "
+                "The test-generator reads the spec at docs/specs/mock.openapi.json using Glob and Read, "
+                "then produces positive and negative test cases for every endpoint. "
+                "Writes structured test cases to files/test_cases/test_cases.json. "
+                "Does NOT perform web searches — only reads the spec and writes test case files."
             ),
             tools=["Glob", "Read", "Bash", "Write"],
-            prompt=data_analyst_prompt,
+            prompt=test_generator_prompt,
             model=CLAUDE_MODEL
         ),
-        "report-writer": AgentDefinition(
+        "test-executor": AgentDefinition(
             description=(
-                "Use this agent when you need to create a formal research report document. "
-                "The report-writer reads research findings from files/research_notes/, data analysis "
-                "from files/data/, and charts from files/charts/, then synthesizes them into clear, "
-                "concise, professionally formatted PDF reports in files/reports/ using reportlab. "
-                "Ideal for creating structured documents with proper citations, data, and embedded visuals. "
-                "Does NOT conduct web searches - only reads existing research notes and creates PDF reports."
+                "Use this agent AFTER test-generator has completed to execute HTTP requests against the API. "
+                "The test-executor reads test cases from files/test_cases/test_cases.json, "
+                "sends concurrent HTTP requests via Python httpx with ThreadPoolExecutor, "
+                "and writes structured results to files/test_results/results.json. "
+                "Results include test_id, passed, actual_status, latency_ms, and error fields."
             ),
-            tools=["Skill", "Write", "Glob", "Read", "Bash"],
-            prompt=report_writer_prompt,
+            tools=["Glob", "Read", "Bash", "Write"],
+            prompt=test_executor_prompt,
+            model=CLAUDE_MODEL
+        ),
+        "qa-report-writer": AgentDefinition(
+            description=(
+                "Use this agent AFTER test-executor has completed to generate a Markdown QA report. "
+                "The qa-report-writer reads results from files/test_results/results.json, "
+                "computes summary statistics and latency metrics, then writes a structured Markdown report "
+                "to files/reports/qa_report_YYYYMMDD.md. "
+                "Does NOT perform web searches — only reads results and writes the Markdown report."
+            ),
+            tools=["Glob", "Read", "Bash", "Write"],
+            prompt=qa_report_writer_prompt,
             model=CLAUDE_MODEL
         )
     }
@@ -155,40 +154,27 @@ async def chat():
     )
 
     print("\n" + "=" * 50)
-    print("  Research Agent")
+    print("  QA Testing Agent")
     print("=" * 50)
-    print("\nResearch any topic and get a comprehensive PDF")
-    print("report with data visualizations.")
-    print("\nType 'exit' to quit.\n")
+    print("\nRunning QA testing pipeline on docs/specs/mock.openapi.json")
+    print()
 
     try:
         async with ClaudeSDKClient(options=options) as client:
-            while True:
-                # Get input
-                try:
-                    user_input = input("\nYou: ").strip()
-                except (EOFError, KeyboardInterrupt):
-                    break
+            prompt = "Run QA testing pipeline on docs/specs/mock.openapi.json"
+            transcript.write_to_file(f"\nPrompt: {prompt}\n")
 
-                if not user_input or user_input.lower() in ["exit", "quit", "q"]:
-                    break
+            await client.query(prompt=prompt)
 
-                # Write user input to transcript (file only, not console)
-                transcript.write_to_file(f"\nYou: {user_input}\n")
+            transcript.write("\nAgent: ", end="")
 
-                # Send to agent
-                await client.query(prompt=user_input)
+            async for msg in client.receive_response():
+                if type(msg).__name__ == 'AssistantMessage':
+                    process_assistant_message(msg, tracker, transcript)
 
-                transcript.write("\nAgent: ", end="")
-
-                # Stream and process response
-                async for msg in client.receive_response():
-                    if type(msg).__name__ == 'AssistantMessage':
-                        process_assistant_message(msg, tracker, transcript)
-
-                transcript.write("\n")
+            transcript.write("\n")
     finally:
-        transcript.write("\n\nGoodbye!\n")
+        transcript.write("\n\nDone.\n")
         transcript.close()
         tracker.close()
         print(f"\nSession logs saved to: {session_dir}")
@@ -197,4 +183,4 @@ async def chat():
 
 
 if __name__ == "__main__":
-    asyncio.run(chat())
+    asyncio.run(run())

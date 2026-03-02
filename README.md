@@ -1,6 +1,6 @@
-# Multi-Agent Research System (Vertex AI Edition)
+# QA Testing Agent (Vertex AI Edition)
 
-A multi-agent research system that coordinates specialized subagents to research any topic and generate comprehensive PDF reports with data visualizations.
+A single-shot QA testing pipeline that reads an OpenAPI specification, generates test cases, executes them against the API endpoints, and produces a Markdown report.
 
 **Key Difference**: This version uses Vertex AI SDK for authentication to access Claude via Google Cloud Platform, while maintaining the Claude Agent SDK for agentic framework features (tool use, MCP servers, conversation management).
 
@@ -23,7 +23,16 @@ export GOOGLE_CLOUD_LOCATION="global"
 uv run python research_agent/agent.py
 ```
 
-Then ask: "Research quantum computing developments in 2025"
+## Pipeline Overview
+
+The agent runs a single-shot pipeline in the following order:
+
+1. Reads API specs to discover all API endpoints
+2. Generates test cases covering each endpoint (happy path, error cases, edge cases)
+3. Executes each test case against the target API server
+4. Produces a Markdown report summarising pass/fail status and latency metrics
+
+No interactive prompts are required. Running the command above starts and completes the full pipeline automatically.
 
 ## Authentication
 
@@ -40,63 +49,14 @@ The project uses a monkey-patch approach to integrate Vertex AI:
 
 See `research_agent/utils/vertex_patch.py` for implementation details.
 
-## How It Works
-
-1. **Lead Agent** breaks your request into 2-4 subtopics
-2. Spawns **Researcher** subagents in parallel to search the web
-3. Each Researcher saves findings to `files/research_notes/`
-4. Spawns **Data Analyst** to extract metrics and generate charts in `files/charts/`
-5. Spawns **Report Writer** to create final PDF report in `files/reports/`
-
-## Agents
-
-| Agent | Tools | Purpose |
-|-------|-------|---------|
-| **Lead Agent** | `Task` | Coordinates research, delegates to subagents |
-| **Researcher** | `WebSearch`, `Write` | Gathers information from the web |
-| **Data Analyst** | `Glob`, `Read`, `Bash`, `Write` | Extracts metrics, generates charts |
-| **Report Writer** | `Skill`, `Write`, `Glob`, `Read`, `Bash` | Creates PDF reports with embedded visuals |
-
-## Slash Commands
-
-| Command | Description |
-|---------|-------------|
-| `/research <topic>` | Start focused research on any topic |
-| `/competitive-analysis <company>` | Analyze companies or products |
-| `/market-trends <industry>` | Research industry trends |
-| `/fact-check <claim>` | Verify claims and statements |
-| `/summarize` | Summarize all current research findings |
-
-## Example Queries
-
-- "Research quantum computing developments"
-- "What are current trends in renewable energy?"
-- `/competitive-analysis Tesla`
-- `/market-trends artificial intelligence`
-
-## Output Structure
-
-```
-files/
-├── research_notes/     # Markdown files from researchers
-├── data/               # Data summaries from analyst
-├── charts/             # PNG visualizations
-└── reports/            # Final PDF reports
-
-logs/
-└── session_YYYYMMDD_HHMMSS/
-    ├── transcript.txt      # Human-readable conversation
-    └── tool_calls.jsonl    # Structured tool usage log
-```
-
 ## Subagent Tracking with Hooks
 
 The system tracks all tool calls using SDK hooks.
 
 ### What Gets Tracked
 
-- **Who**: Which agent (RESEARCHER-1, DATA-ANALYST-1, etc.)
-- **What**: Tool name (WebSearch, Write, Bash, etc.)
+- **Who**: Which agent made the call
+- **What**: Tool name (Write, Read, Bash, etc.)
 - **When**: Timestamp
 - **Input/Output**: Parameters and results
 
@@ -111,23 +71,8 @@ hooks = Hooks(
 )
 ```
 
-The `parent_tool_use_id` links tool calls to their subagent:
-- Lead Agent spawns a Researcher via `Task` tool → gets ID "task_123"
-- All tool calls from that Researcher include `parent_tool_use_id = "task_123"`
-- Hooks use this ID to identify which subagent made the call
-
 ### Log Output
 
-**transcript.txt** - Human-readable:
-```
-[RESEARCHER-1] → WebSearch
-    Input: query='quantum computing 2025'
-[DATA-ANALYST-1] → Bash
-    Input: python matplotlib chart generation
-```
+**transcript.txt** - Human-readable session log
 
-**tool_calls.jsonl** - Structured JSON:
-```json
-{"event":"tool_call_start","agent_id":"RESEARCHER-1","tool_name":"WebSearch",...}
-{"event":"tool_call_complete","success":true,"output_size":15234}
-```
+**tool_calls.jsonl** - Structured JSON log of every tool call with event type, agent id, tool name, and timestamps
