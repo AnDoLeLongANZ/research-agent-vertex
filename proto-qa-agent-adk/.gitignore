@@ -12,3 +12,5 @@ files/test_cases/*.json
 files/test_results/*.json
 files/reports/*.md
 uv.lock
+
+**/session.db

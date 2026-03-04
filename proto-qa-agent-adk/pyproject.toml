@@ -70,6 +70,9 @@ example_question = "Run QA on the proto files in specs/"
 [tool.agent-starter-pack.settings]
 agent_directory = "proto_qa_agent"
 
+[tool.hatch.build.targets.wheel]
+packages = ["proto_qa_agent"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

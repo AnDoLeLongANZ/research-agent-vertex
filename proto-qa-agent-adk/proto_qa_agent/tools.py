@@ -4,11 +4,10 @@ import os
 import subprocess
 import sys
 
-from google.adk.tools import tool
+from google.adk.tools import FunctionTool
 
 
-@tool
-def read_file(path: str) -> str:
+def _read_file(path: str) -> str:
     """Read the contents of a text file at the given path. Returns file contents or an error string."""
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -19,8 +18,7 @@ def read_file(path: str) -> str:
         return f"ERROR: {e}"
 
 
-@tool
-def write_json(path: str, content: str) -> str:
+def _write_json(path: str, content: str) -> str:
     """Write a JSON string to a file at the given path, creating parent directories as needed. Returns confirmation or error string."""
     try:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -34,8 +32,7 @@ def write_json(path: str, content: str) -> str:
         return f"ERROR: {e}"
 
 
-@tool
-def write_file(path: str, content: str) -> str:
+def _write_file(path: str, content: str) -> str:
     """Write raw string content to a file at the given path, creating parent directories as needed. Returns confirmation or error string."""
     try:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -46,8 +43,7 @@ def write_file(path: str, content: str) -> str:
         return f"ERROR: {e}"
 
 
-@tool
-def list_proto_files(directory: str) -> str:
+def _list_proto_files(directory: str) -> str:
     """List all .proto files in the given directory. Returns newline-delimited file paths, or empty string if none found."""
     try:
         files = glob_module.glob(f"{directory}/*.proto")
@@ -56,8 +52,7 @@ def list_proto_files(directory: str) -> str:
         return f"ERROR: {e}"
 
 
-@tool
-def run_python_snippet(code: str) -> str:
+def _run_python_snippet(code: str) -> str:
     """Execute a Python code snippet via subprocess and return stdout. Returns stderr string on error."""
     try:
         result = subprocess.run(
@@ -73,3 +68,10 @@ def run_python_snippet(code: str) -> str:
         return "ERROR: Timeout — snippet took longer than 120 seconds"
     except Exception as e:
         return f"ERROR: {e}"
+
+
+read_file = FunctionTool(_read_file)
+write_json = FunctionTool(_write_json)
+write_file = FunctionTool(_write_file)
+list_proto_files = FunctionTool(_list_proto_files)
+run_python_snippet = FunctionTool(_run_python_snippet)

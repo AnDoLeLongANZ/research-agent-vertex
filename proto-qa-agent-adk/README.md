@@ -32,6 +32,8 @@ Sub-agents communicate via JSON files in `files/`. The coordinator halts if vali
    ```bash
    cp .env.example .env
    # Edit .env and set GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION
+
+   export GOOGLE_CLOUD_PROJECT=<YOUR_PROJECT_ID>
    ```
 
 3. Add your `.proto` files to `specs/`:
